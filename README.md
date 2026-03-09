@@ -1,6 +1,8 @@
 # Pirate Locomotion
 Updated and expanded VR locomotion system based off Another Axiom's open source Gorilla Locomotion.
 
+**SUPPORTED UNITY VERSIONS ARE 2019.3-6000** __as of March 3rd 2026__
+
 Features:
 - Material based hit sounds
 - Vibrations
