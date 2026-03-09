@@ -1,5 +1,12 @@
-# GorillaLocomotion
-locomotion system used in Gorilla Tag
+# Pirate Locomotion
+Updated and expanded VR locomotion system based off Another Axiom's open source Gorilla Locomotion.
 
+Features:
+- Material based hit sounds
+- Vibrations
 
-This project is licensed under the terms of the MIT license.
+Fixes:
+- Updated old XRRig with XROrigin
+- Updated materials to URP based ones
+- Named the hand followers to their controller counterparts
+- Fixed the followers not following the controllers' rotation 
