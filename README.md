@@ -10,3 +10,4 @@ Fixes:
 - Updated materials to URP based ones
 - Named the hand followers to their controller counterparts
 - Fixed the followers not following the controllers' rotation 
+- Fixed the default scene being overriden by reimporting the locomotion package
