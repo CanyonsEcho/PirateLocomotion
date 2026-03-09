@@ -1,5 +1,8 @@
-﻿namespace GorillaLocomotion
+﻿using UnityEngine;
+
+namespace GorillaLocomotion
 {
+    using System.Collections.Generic;
     using UnityEngine;
 
     public class Player : MonoBehaviour
@@ -45,6 +48,14 @@
         public Vector3 leftHandOffset;
 
         public LayerMask locomotionEnabledLayers;
+
+        public List<MaterialAudio> materialAudio = new List<MaterialAudio>();
+        public AudioClip defaultHitSound;
+        public AudioSource leftHandAudioSource;
+        public AudioSource rightHandAudioSource;
+
+        public float hapticAmplitude = 0.5f;
+        public float hapticDuration = 0.1f;
 
         public bool wasLeftHandTouching;
         public bool wasRightHandTouching;
@@ -106,6 +117,8 @@
 
         private void Update()
         {
+            bool leftEffectTriggeredThisUpdate = false;
+            bool rightEffectTriggeredThisUpdate = false;
             bool leftHandColliding = false;
             bool rightHandColliding = false;
             Vector3 finalPosition;
@@ -120,40 +133,62 @@
 
             Vector3 distanceTraveled = CurrentLeftHandPosition() - lastLeftHandPosition + Vector3.down * 2f * 9.8f * Time.deltaTime * Time.deltaTime;
 
-            if (IterativeCollisionSphereCast(lastLeftHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, true))
+            RaycastHit hitInfoLeft;
+            if (IterativeCollisionSphereCast(lastLeftHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, true, out hitInfoLeft))
             {
                 //this lets you stick to the position you touch, as long as you keep touching the surface this will be the zero point for that hand
+                // reduce stickiness based on surface slipPercentage (0 = fully sticky, 1 = fully slippery)
+                Surface leftSurf = hitInfoLeft.collider != null ? hitInfoLeft.collider.GetComponent<Surface>() : null;
+                float leftSlip = leftSurf != null ? leftSurf.slipPercentage : (!true ? defaultSlideFactor : 0.001f);
+                leftSlip = Mathf.Clamp01(leftSlip);
+                float leftStickFactor = 1f - leftSlip;
                 if (wasLeftHandTouching)
                 {
-                    firstIterationLeftHand = lastLeftHandPosition - CurrentLeftHandPosition();
+                    firstIterationLeftHand = (lastLeftHandPosition - CurrentLeftHandPosition()) * leftStickFactor;
                 }
                 else
                 {
-                    firstIterationLeftHand = finalPosition - CurrentLeftHandPosition();
+                    firstIterationLeftHand = (finalPosition - CurrentLeftHandPosition()) * leftStickFactor;
                 }
                 playerRigidBody.velocity = Vector3.zero;
 
                 leftHandColliding = true;
+                if (!wasLeftHandTouching && !leftEffectTriggeredThisUpdate)
+                {
+                    PlayCollisionEffects(hitInfoLeft, true);
+                    leftEffectTriggeredThisUpdate = true;
+                }
             }
 
             //right hand
 
             distanceTraveled = CurrentRightHandPosition() - lastRightHandPosition + Vector3.down * 2f * 9.8f * Time.deltaTime * Time.deltaTime;
 
-            if (IterativeCollisionSphereCast(lastRightHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, true))
+            RaycastHit hitInfoRight;
+            if (IterativeCollisionSphereCast(lastRightHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, true, out hitInfoRight))
             {
+                // reduce stickiness based on surface slipPercentage (0 = fully sticky, 1 = fully slippery)
+                Surface rightSurf = hitInfoRight.collider != null ? hitInfoRight.collider.GetComponent<Surface>() : null;
+                float rightSlip = rightSurf != null ? rightSurf.slipPercentage : (!true ? defaultSlideFactor : 0.001f);
+                rightSlip = Mathf.Clamp01(rightSlip);
+                float rightStickFactor = 1f - rightSlip;
                 if (wasRightHandTouching)
                 {
-                    firstIterationRightHand = lastRightHandPosition - CurrentRightHandPosition();
+                    firstIterationRightHand = (lastRightHandPosition - CurrentRightHandPosition()) * rightStickFactor;
                 }
                 else
                 {
-                    firstIterationRightHand = finalPosition - CurrentRightHandPosition();
+                    firstIterationRightHand = (finalPosition - CurrentRightHandPosition()) * rightStickFactor;
                 }
 
                 playerRigidBody.velocity = Vector3.zero;
 
                 rightHandColliding = true;
+                if (!wasRightHandTouching && !rightEffectTriggeredThisUpdate)
+                {
+                    PlayCollisionEffects(hitInfoRight, false);
+                    rightEffectTriggeredThisUpdate = true;
+                }
             }
 
             //average or add
@@ -170,7 +205,8 @@
 
             //check valid head movement
 
-            if (IterativeCollisionSphereCast(lastHeadPosition, headCollider.radius, headCollider.transform.position + rigidBodyMovement - lastHeadPosition, defaultPrecision, out finalPosition, false))
+            RaycastHit headHit;
+            if (IterativeCollisionSphereCast(lastHeadPosition, headCollider.radius, headCollider.transform.position + rigidBodyMovement - lastHeadPosition, defaultPrecision, out finalPosition, false, out headHit))
             {
                 rigidBodyMovement = finalPosition - lastHeadPosition;
                 //last check to make sure the head won't phase through geometry
@@ -191,10 +227,16 @@
 
             distanceTraveled = CurrentLeftHandPosition() - lastLeftHandPosition;
 
-            if (IterativeCollisionSphereCast(lastLeftHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, !((leftHandColliding || wasLeftHandTouching) && (rightHandColliding || wasRightHandTouching))))
+            RaycastHit hitInfoLeftFinal;
+            if (IterativeCollisionSphereCast(lastLeftHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, !((leftHandColliding || wasLeftHandTouching) && (rightHandColliding || wasRightHandTouching)), out hitInfoLeftFinal))
             {
                 lastLeftHandPosition = finalPosition;
                 leftHandColliding = true;
+                if (!wasLeftHandTouching && !leftEffectTriggeredThisUpdate)
+                {
+                    PlayCollisionEffects(hitInfoLeftFinal, true);
+                    leftEffectTriggeredThisUpdate = true;
+                }
             }
             else
             {
@@ -205,10 +247,16 @@
 
             distanceTraveled = CurrentRightHandPosition() - lastRightHandPosition;
 
-            if (IterativeCollisionSphereCast(lastRightHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, !((leftHandColliding || wasLeftHandTouching) && (rightHandColliding || wasRightHandTouching))))
+            RaycastHit hitInfoRightFinal;
+            if (IterativeCollisionSphereCast(lastRightHandPosition, minimumRaycastDistance, distanceTraveled, defaultPrecision, out finalPosition, !((leftHandColliding || wasLeftHandTouching) && (rightHandColliding || wasRightHandTouching)), out hitInfoRightFinal))
             {
                 lastRightHandPosition = finalPosition;
                 rightHandColliding = true;
+                if (!wasRightHandTouching && !rightEffectTriggeredThisUpdate)
+                {
+                    PlayCollisionEffects(hitInfoRightFinal, false);
+                    rightEffectTriggeredThisUpdate = true;
+                }
             }
             else
             {
@@ -249,13 +297,15 @@
             }
 
             leftHandFollower.position = lastLeftHandPosition;
+            leftHandFollower.rotation = leftHandTransform.rotation;
             rightHandFollower.position = lastRightHandPosition;
+            rightHandFollower.rotation = rightHandTransform.rotation;
 
             wasLeftHandTouching = leftHandColliding;
             wasRightHandTouching = rightHandColliding;
         }
 
-        private bool IterativeCollisionSphereCast(Vector3 startPosition, float sphereRadius, Vector3 movementVector, float precision, out Vector3 endPosition, bool singleHand)
+        private bool IterativeCollisionSphereCast(Vector3 startPosition, float sphereRadius, Vector3 movementVector, float precision, out Vector3 endPosition, bool singleHand, out RaycastHit outHit)
         {
             RaycastHit hitInfo;
             Vector3 movementToProjectedAboveCollisionPlane;
@@ -274,18 +324,21 @@
                 if (CollisionsSphereCast(endPosition, sphereRadius, movementToProjectedAboveCollisionPlane, precision * precision, out endPosition, out hitInfo))
                 {
                     //if we hit trying to move perpendicularly, stop there and our end position is the final spot we hit
+                    outHit = hitInfo;
                     return true;
                 }
                 //if not, try to move closer towards the true point to account for the fact that the movement along the normal of the hit could have moved you away from the surface
                 else if (CollisionsSphereCast(movementToProjectedAboveCollisionPlane + firstPosition, sphereRadius, startPosition + movementVector - (movementToProjectedAboveCollisionPlane + firstPosition), precision * precision * precision, out endPosition, out hitInfo))
                 {
                     //if we hit, then return the spot we hit
+                    outHit = hitInfo;
                     return true;
                 }
                 else
                 {
                     //this shouldn't really happe, since this means that the sliding motion got you around some corner or something and let you get to your final point. back off because something strange happened, so just don't do the slide
                     endPosition = firstPosition;
+                    outHit = hitInfo;
                     return true;
                 }
             }
@@ -293,10 +346,12 @@
             else if (CollisionsSphereCast(startPosition, sphereRadius * precision * 0.66f, movementVector.normalized * (movementVector.magnitude + sphereRadius * precision * 0.34f), precision * 0.66f, out endPosition, out hitInfo))
             {
                 endPosition = startPosition;
+                outHit = hitInfo;
                 return true;
             } else
             {
                 endPosition = Vector3.zero;
+                outHit = new RaycastHit();
                 return false;
             }
         }
@@ -372,5 +427,92 @@
             velocityHistory[velocityIndex] = currentVelocity;
             lastPosition = transform.position;
         }
+
+        private string GetMaterialNameFromHit(RaycastHit hit)
+        {
+            if (hit.collider == null) return string.Empty;
+            Surface surf = hit.collider.GetComponent<Surface>();
+            if (surf != null && !string.IsNullOrEmpty(surf.materialName)) return surf.materialName;
+
+            MeshFilter mf = hit.collider.GetComponent<MeshFilter>();
+            Renderer rend = hit.collider.GetComponent<Renderer>();
+            if (mf != null && rend != null && mf.sharedMesh != null)
+            {
+                Mesh mesh = mf.sharedMesh;
+                int triangleIndex = hit.triangleIndex;
+                if (triangleIndex >= 0)
+                {
+                    int triCountSum = 0;
+                    for (int i = 0; i < mesh.subMeshCount; i++)
+                    {
+                        int triCount = mesh.GetTriangles(i).Length / 3;
+                        if (triangleIndex < triCountSum + triCount)
+                        {
+                            var mats = rend.sharedMaterials;
+                            if (i < mats.Length && mats[i] != null)
+                                return mats[i].name;
+                            break;
+                        }
+                        triCountSum += triCount;
+                    }
+                }
+            }
+
+            if (hit.collider.sharedMaterial != null) return hit.collider.sharedMaterial.name;
+
+            return hit.collider.gameObject.tag;
+        }
+
+        private void PlayCollisionEffects(RaycastHit hit, bool leftHand)
+        {
+            AudioSource collisionAudioSource = leftHand ? leftHandAudioSource : rightHandAudioSource;
+            string matName = GetMaterialNameFromHit(hit);
+            MaterialAudio found = null;
+            foreach (var m in materialAudio)
+            {
+                if (m.materialName == string.Empty || m.materialName == matName)
+                {
+                    found = m;
+                    break;
+                }
+            }
+
+            if (collisionAudioSource == null)
+            {
+                collisionAudioSource = gameObject.GetComponent<AudioSource>() ?? gameObject.AddComponent<AudioSource>();
+            }
+
+            if (found != null && found.audioClip != null)
+            {
+                collisionAudioSource.PlayOneShot(found.audioClip);
+            }
+            else if (defaultHitSound != null)
+            {
+                collisionAudioSource.PlayOneShot(defaultHitSound);
+            }
+
+            TriggerHaptic(leftHand);
+        }
+
+        private void TriggerHaptic(bool left)
+        {
+            var node = left ? UnityEngine.XR.XRNode.LeftHand : UnityEngine.XR.XRNode.RightHand;
+            var device = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(node);
+            if (device.isValid)
+            {
+                try
+                {
+                    device.SendHapticImpulse(0u, hapticAmplitude, hapticDuration);
+                }
+                catch { }
+            }
+        }
+    }
+
+    [System.Serializable]
+    public class MaterialAudio
+    {
+        public string materialName;
+        public AudioClip audioClip;
     }
 }

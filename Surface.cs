@@ -5,5 +5,6 @@
     public class Surface : MonoBehaviour
     {
         public float slipPercentage;
+        public string materialName;
     }
 }
